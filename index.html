@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script data-goatcounter="https://untisaccess.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>UNTIS // TEACHER ACCESS</title>
@@ -684,7 +686,7 @@ body::after { display: none; }
     </div>
     <div id="loading-overlay">
       <div class="spinner">SCANNING</div>
-      <div id="loading-text">INTERCEPTING TIMETABLE DATA...</div>
+      <div id="loading-text">FETCHING TIMETABLE DATA...</div>
       <div id="loading-progress"></div>
     </div>
   </div>
@@ -906,7 +908,7 @@ async function boot() {
       const ttData = await fetchClassTimetable(k.id, weekStr);
       done++;
       setProgress(30 + Math.round((done / activeKlassen.length) * 55));
-      bootLog(`INTERCEPTED: ${k.name.padEnd(8)} [${done}/${activeKlassen.length}]`);
+      bootLog(`FETCHED: ${k.name.padEnd(8)} [${done}/${activeKlassen.length}]`);
       return { klassId: k.id, ttData };
     });
 
@@ -1005,7 +1007,7 @@ async function changeWeek(dir) {
 
   const overlay = document.getElementById('loading-overlay');
   overlay.classList.add('visible');
-  document.getElementById('loading-text').textContent = 'INTERCEPTING NEW WEEK DATA...';
+  document.getElementById('loading-text').textContent = 'FETCHING NEW WEEK DATA...';
 
   try {
     const activeKlassen = masterData.klassen.filter(k => k.active && k.displayable);
