@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>UNTIS // TEACHER ACCESS</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --green: #00ff41;
+  --green-dim: #00b32c;
+  --green-dark: #003d0d;
+  --green-glow: rgba(0,255,65,0.15);
+  --amber: #ffb000;
+  --red: #ff2d2d;
+  --bg: #020c04;
+  --bg2: #040f06;
+  --border: #00ff4133;
+  --scanline: rgba(0,0,0,0.4);
+  --font-mono: 'Share Tech Mono', monospace;
+  --font-display: 'VT323', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--bg);
+  color: var(--green);
+  font-family: var(--font-mono);
+  cursor: crosshair;
+}
+
+/* CRT scanlines overlay */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0,0,0,0.1) 3px,
+    rgba(0,0,0,0.1) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+  
+}
+body::after { display: none; }
+
+
+/* ── BOOT SCREEN ── */
+#boot {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: var(--bg);
+  z-index: 1000;
+  gap: 1rem;
+}
+#boot.hidden { display: none; }
+
+.boot-logo {
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  color: var(--green);
+  letter-spacing: 0.2em;
+  animation: phosphor-breathe 4s ease-in-out infinite;
+}
+.boot-sub {
+  font-size: 0.7rem;
+  color: var(--green-dim);
+  letter-spacing: 0.5em;
+  text-transform: uppercase;
+}
+#boot-log {
+  width: min(600px, 90vw);
+  max-height: 200px;
+  overflow: hidden;
+  font-size: 0.75rem;
+  color: var(--green-dim);
+  line-height: 1.6;
+}
+#boot-log .line { animation: fadein 0.1s ease; }
+.progress-bar-wrap {
+  width: min(600px, 90vw);
+  border: 1px solid var(--green-dim);
+  height: 18px;
+  position: relative;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--green);
+  width: 0%;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px var(--green);
+}
+.progress-bar-wrap::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(90deg, transparent, transparent 4px, rgba(0,0,0,0.3) 4px, rgba(0,0,0,0.3) 6px);
+}
+
+/* ── MAIN LAYOUT ── */
+#app {
+  display: none;
+  width: 100vw; height: 100vh;
+  grid-template-columns: 260px 1fr;
+  grid-template-rows: 48px 1fr;
+}
+#app.visible { display: grid; }
+
+/* TOP BAR */
+#topbar {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  position: relative;
+  overflow: hidden;
+}
+#topbar::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, var(--green-glow), transparent 40%);
+  pointer-events: none;
+}
+.topbar-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--green);
+  text-shadow: 0 0 8px var(--green);
+  letter-spacing: 0.15em;
+}
+.topbar-sep { color: var(--green-dim); margin: 0 0.25rem; }
+.topbar-info { font-size: 0.65rem; color: var(--green-dim); letter-spacing: 0.1em; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 1rem; }
+.week-nav { display: flex; align-items: center; gap: 0.5rem; }
+.week-nav button {
+  background: none; border: 1px solid var(--border);
+  color: var(--green); font-family: var(--font-mono); font-size: 0.75rem;
+  padding: 0.2rem 0.6rem; cursor: pointer; transition: all 0.15s;
+}
+.week-nav button:hover { background: var(--green-glow); border-color: var(--green); box-shadow: 0 0 6px var(--green); }
+#week-label { font-size: 0.7rem; color: var(--green-dim); min-width: 120px; text-align: center; }
+#status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 6px var(--green);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* SIDEBAR */
+#sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--bg2);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-header {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.6rem; color: var(--green-dim);
+  letter-spacing: 0.3em; text-transform: uppercase;
+}
+#search-wrap {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+#search-wrap::before { content: '> '; color: var(--green-dim); position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); font-size: 0.8rem; }
+#teacher-search {
+  width: 100%; 
+  background: transparent;
+  border: none; 
+  outline: none;
+  color: var(--green); 
+  font-family: var(--font-mono); 
+  font-size: 16px; 
+
+  padding-left: 1.2rem;
+  caret-color: var(--green);
+}
+#teacher-count { font-size: 0.6rem; color: var(--green-dim); padding: 0.3rem 0.75rem; border-bottom: 1px solid var(--border); }
+#teacher-list {
+  flex: 1; overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--green-dim) transparent;
+}
+#teacher-list::-webkit-scrollbar { width: 4px; }
+#teacher-list::-webkit-scrollbar-thumb { background: var(--green-dim); }
+
+.teacher-item {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(0,255,65,0.05);
+  display: flex; align-items: center; gap: 0.5rem;
+  transition: background 0.1s;
+  position: relative;
+}
+.teacher-item:hover { background: var(--green-glow); }
+.teacher-item.active {
+  background: rgba(0,255,65,0.12);
+  border-left: 2px solid var(--green);
+}
+.teacher-item .t-abbr {
+  font-family: var(--font-display); font-size: 1rem;
+  color: var(--green); min-width: 52px;
+  text-shadow: 0 0 4px var(--green-dim);
+}
+.teacher-item .t-name { color: var(--green-dim); font-size: 0.65rem; line-height: 1.3; }
+.teacher-item .t-badge {
+  margin-left: auto; font-size: 0.55rem;
+  color: var(--bg); background: var(--green-dim);
+  padding: 1px 4px; border-radius: 2px;
+}
+
+/* MAIN CONTENT */
+#main {
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* EMPTY STATE */
+#empty-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1rem;
+  color: var(--green-dim);
+}
+.empty-ascii {
+  font-family: var(--font-display); font-size: 1rem;
+  color: var(--green-dark); line-height: 1.2;
+  white-space: pre; text-align: center;
+}
+.empty-hint { font-size: 0.7rem; letter-spacing: 0.2em; }
+
+/* TIMETABLE */
+#timetable-wrap {
+  flex: 1; overflow: auto;
+  padding: 1rem;
+  display: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--green-dim) transparent;
+}
+#timetable-wrap.visible { display: block; position: relative; }
+
+/* Current time indicator */
+#time-bar {
+  position: absolute;
+  left: 0; right: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 20;
+  display: none;
+}
+#time-bar::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 2px;
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber), 0 0 12px rgba(255,176,0,0.3);
+}
+#time-bar::after {
+  content: '';
+  position: absolute;
+  left: 0; top: -3px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 8px var(--amber);
+}
+
+.tt-teacher-header {
+  display: flex; align-items: baseline; gap: 1rem;
+  margin-bottom: 1rem; padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.tt-teacher-name {
+  font-family: var(--font-display); font-size: 2rem;
+  color: var(--green); text-shadow: 0 0 10px var(--green);
+}
+.tt-teacher-full { font-size: 0.7rem; color: var(--green-dim); letter-spacing: 0.1em; }
+
+.tt-grid {
+  display: grid;
+  grid-template-columns: 70px repeat(5, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  min-width: 700px;
+}
+
+.tt-cell {
+  background: var(--bg);
+  padding: 0.2rem 0.3rem;
+  min-height: 28px;
+  font-size: 0.65rem;
+  position: relative;
+  overflow: hidden;
+}
+.tt-cell.header {
+  background: var(--bg2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 1rem;
+  color: var(--green-dim); letter-spacing: 0.15em;
+  padding: 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+.tt-cell.time-col {
+  background: var(--bg2);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 0.55rem; color: var(--green-dim); gap: 1px;
+  border-right: 1px solid var(--border);
+}
+.tt-cell.time-col .period-num {
+  font-family: var(--font-display); font-size: 0.9rem; color: var(--green-dim);
+}
+.tt-cell.today-col { background: rgba(0,255,65,0.03); }
+
+.period-block {
+  background: var(--green-dark);
+  border: 1px solid var(--green-dim);
+  border-left: 3px solid var(--green);
+  border-radius: 1px;
+  padding: 0.2rem 0.3rem;
+  height: 100%;
+  display: flex; flex-direction: column; gap: 1px;
+  box-shadow: 0 0 6px rgba(0,255,65,0.1);
+  cursor: default;
+  transition: box-shadow 0.15s, border-color 0.15s;
+  position: relative;
+}
+.period-block:hover {
+  box-shadow: 0 0 12px rgba(0,255,65,0.3);
+  border-color: var(--green);
+  z-index: 10;
+}
+.period-block.cancelled {
+  background: rgba(120,120,120,0.07);
+  border-color: #555;
+  border-left-color: #666;
+  opacity: 0.75;
+}
+.period-block.cancelled .pb-subject {
+  color: #777;
+  text-shadow: none;
+  text-decoration: line-through;
+  text-decoration-color: #888;
+  text-decoration-thickness: 2px;
+}
+.period-block.cancelled .pb-classes { color: #666; }
+.period-block.cancelled .pb-room    { color: #555; }
+.period-block.cancelled:hover { box-shadow: 0 0 8px rgba(120,120,120,0.2); border-color: #777; }
+
+.period-block.substitution {
+  background: rgba(0, 140, 255, 0.08);
+  border-color: #1a6fcc;
+  border-left-color: #3399ff;
+  box-shadow: 0 0 6px rgba(51,153,255,0.15);
+}
+.period-block.substitution .pb-subject {
+  color: #5bb8ff;
+  text-shadow: 0 0 4px rgba(51,153,255,0.4);
+}
+.period-block.substitution .pb-classes { color: #4a9fe0; }
+.period-block.substitution .pb-room    { color: #3a7aad; }
+.period-block.substitution:hover { box-shadow: 0 0 12px rgba(51,153,255,0.35); border-color: #3399ff; }
+.period-block.irregular {
+  border-left-color: var(--amber);
+}
+
+.pb-subject {
+  font-family: var(--font-display); font-size: 1rem;
+  color: var(--green); line-height: 1;
+  text-shadow: 0 0 4px var(--green-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pb-classes { font-size: 0.55rem; color: var(--amber); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pb-room { font-size: 0.55rem; color: var(--green-dim); }
+
+/* tooltip on hover */
+.period-block:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: 100%; left: 0;
+  background: #000;
+  border: 1px solid var(--green);
+  color: var(--green);
+  font-size: 0.6rem;
+  padding: 0.3rem 0.5rem;
+  z-index: 100;
+  white-space: pre;
+  pointer-events: none;
+  min-width: 140px;
+  box-shadow: 0 0 10px rgba(0,255,65,0.2);
+}
+
+/* ── LOADING OVERLAY ── */
+#loading-overlay {
+  display: none;
+  position: absolute; inset: 0;
+  background: rgba(2,12,4,0.8);
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 0.5rem; z-index: 50;
+}
+#loading-overlay.visible { display: flex; }
+.spinner {
+  font-family: var(--font-display); font-size: 2rem;
+  color: var(--green);
+  animation: spin-chars 0.2s steps(1) infinite;
+}
+@keyframes spin-chars {
+  0%  { content: '⣾'; } 12% { content: '⣽'; } 25% { content: '⣻'; }
+  37% { content: '⢿'; } 50% { content: '⡿'; } 62% { content: '⣟'; }
+  75% { content: '⣯'; } 87% { content: '⣷'; }
+}
+.spinner::before { content: '//'; color: var(--green-dim); font-size: 1rem; margin-right: 0.5rem; }
+#loading-text { font-size: 0.7rem; color: var(--green-dim); letter-spacing: 0.2em; }
+#loading-progress { font-size: 0.65rem; color: var(--green-dim); }
+
+/* ── GLITCH EFFECT ── */
+@keyframes phosphor-breathe {
+  0%,100%{ text-shadow: 0 0 8px var(--green), 0 0 16px var(--green-dim); }
+  50%{ text-shadow: 0 0 14px var(--green), 0 0 28px var(--green-dim), 0 0 40px rgba(0,255,65,0.3); }
+}
+@keyframes fadein { from{opacity:0;transform:translateY(2px)} to{opacity:1;transform:none} }
+
+.glitch {
+  position: relative;
+  animation: phosphor-breathe 6s ease-in-out infinite;
+}
+.glitch::before, .glitch::after {
+  content: attr(data-text);
+  position: absolute; top: 0; left: 0;
+  width: 100%;
+}
+.glitch::before {
+  color: #ff0040;
+  animation: glitch1 12s infinite;
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+}
+.glitch::after {
+  color: #00ffff;
+  animation: glitch2 15s infinite;
+  clip-path: polygon(0 60%, 100% 60%, 100% 100%, 0 100%);
+}
+@keyframes glitch1 {
+  0%,97%,100%{ transform:none; opacity:0 }
+  97.5%{ transform:translateX(-2px); opacity:0.5 }
+  98.5%{ transform:translateX(1px); opacity:0.3 }
+  99%{ transform:none; opacity:0 }
+}
+@keyframes glitch2 {
+  0%,98%,100%{ transform:none; opacity:0 }
+  98.5%{ transform:translateX(2px); opacity:0.4 }
+  99%{ transform:translateX(-1px); opacity:0.2 }
+  99.5%{ transform:none; opacity:0 }
+}
+
+/* corner decorations */
+.corner-tl, .corner-tr, .corner-bl, .corner-br {
+  position: fixed; width: 20px; height: 20px;
+  pointer-events: none; z-index: 9997;
+}
+.corner-tl { top: 4px; left: 4px; border-top: 1px solid var(--green); border-left: 1px solid var(--green); }
+.corner-tr { top: 4px; right: 4px; border-top: 1px solid var(--green); border-right: 1px solid var(--green); }
+.corner-bl { bottom: 4px; left: 4px; border-bottom: 1px solid var(--green); border-left: 1px solid var(--green); }
+.corner-br { bottom: 4px; right: 4px; border-bottom: 1px solid var(--green); border-right: 1px solid var(--green); }
+
+.no-lessons { display: flex; align-items: center; justify-content: center; color: var(--green-dark); font-size: 0.6rem; letter-spacing: 0.2em; }
+
+/* ── MOBILE ── */
+@media (max-width: 768px) {
+  html, body { overflow: hidden; }
+
+  #app.visible {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+  }
+
+  #topbar {
+    flex-shrink: 0;
+    padding: 0 0.75rem;
+    height: 40px;
+  }
+  .topbar-sep    { display: none; }
+  #topbar-time   { display: none; }
+  #status-dot    { display: none; }
+  .topbar-right .week-nav { display: none; }
+  .topbar-right { margin-left: auto; }
+
+  /* ── TEACHER PANEL (replaces sidebar) ── */
+  #sidebar {
+    flex-shrink: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    max-height: 38vh;
+    transition: max-height 0.25s ease;
+  }
+  #sidebar.collapsed { max-height: 40px; overflow: hidden; }
+
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .sidebar-header::after {
+    content: '▲';
+    font-size: 0.6rem;
+    color: var(--green-dim);
+    transition: transform 0.2s;
+  }
+  #sidebar.collapsed .sidebar-header::after { transform: rotate(180deg); }
+
+  #search-wrap { flex-shrink: 0; }
+  #teacher-count { flex-shrink: 0; }
+
+  /* Teacher list: horizontal scrolling chips */
+  #teacher-list {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 0.4rem;
+    padding: 0.4rem 0.6rem;
+    scrollbar-width: none;
+    flex-shrink: 0;
+  }
+  #teacher-list::-webkit-scrollbar { display: none; }
+
+  .teacher-item {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-bottom: none;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 0.3rem 0.5rem;
+    min-width: 52px;
+    text-align: center;
+    gap: 0.1rem;
+  }
+  .teacher-item.active {
+    border-color: var(--green);
+    border-left: 1px solid var(--green); /* override desktop left-border style */
+    background: rgba(0,255,65,0.12);
+  }
+  .teacher-item .t-abbr { min-width: unset; font-size: 0.95rem; }
+  .teacher-item .t-name { display: none; }
+  .teacher-item .t-badge { display: none; }
+
+  /* ── MOBILE BOTTOM BAR (week nav) ── */
+  #mobile-bar {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0.5rem;
+    height: 38px;
+    border-top: 1px solid var(--border);
+    background: var(--bg2);
+    gap: 0.5rem;
+  }
+  #mobile-bar .week-nav { display: flex; align-items: center; gap: 0.4rem; flex: 1; justify-content: center; }
+  #mobile-bar .week-nav button { font-size: 0.65rem; padding: 0.2rem 0.5rem; }
+  #mobile-bar #week-label-m { font-size: 0.6rem; color: var(--green-dim); min-width: 90px; text-align: center; }
+  #mobile-bar .tt-teacher-chip {
+    font-family: var(--font-display); font-size: 1rem;
+    color: var(--green); text-shadow: 0 0 6px var(--green);
+    min-width: 48px; text-align: left;
+  }
+  #mobile-bar .m-status {
+    display: flex; align-items: center; gap: 0.4rem;
+    font-size: 0.65rem; color: var(--green-dim);
+  }
+  #mobile-bar #status-dot-m {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green); box-shadow: 0 0 4px var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  /* Main: takes remaining space */
+  #main { flex: 1; min-height: 0; overflow: hidden; }
+
+  #timetable-wrap {
+    padding: 0.5rem;
+  }
+  .tt-teacher-header { display: none; }
+
+  /* Timetable grid: narrower columns on mobile */
+  .tt-grid {
+    grid-template-columns: 44px repeat(5, 1fr);
+    min-width: 340px;
+  }
+  .tt-cell.header { font-size: 0.75rem; padding: 0.25rem 0.1rem; }
+  .tt-cell.time-col { font-size: 0.45rem; }
+  .tt-cell.time-col .period-num { font-size: 0.75rem; }
+  .pb-subject { font-size: 0.8rem; }
+  .pb-classes { font-size: 0.5rem; }
+  .pb-room    { font-size: 0.5rem; }
+
+  /* Boot screen: smaller on mobile */
+  .boot-logo { font-size: clamp(2rem, 10vw, 3.5rem); }
+  #boot-log  { font-size: 0.65rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="corner-tl"></div>
+<div class="corner-tr"></div>
+<div class="corner-bl"></div>
+<div class="corner-br"></div>
+
+<!-- BOOT SCREEN -->
+<div id="boot">
+  <div class="boot-logo glitch" data-text="UNTIS//ACCESS">UNTIS//ACCESS</div>
+  <div class="boot-sub">unauthorized reconnaissance system v2.1</div>
+  <div style="height:1rem"></div>
+  <div id="boot-log"></div>
+  <div style="height:0.5rem"></div>
+  <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-fill"></div></div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <div class="topbar-title">UNTIS<span style="color:var(--green-dim)">//</span>ACCESS</div>
+    <div class="topbar-sep">|</div>
+    <div class="topbar-info" id="topbar-school">GYMNASIUM PAULINUM</div>
+    <div class="topbar-right">
+      <div class="week-nav">
+        <button onclick="changeWeek(-1)">◄ PREV</button>
+        <span id="week-label">—</span>
+        <button onclick="changeWeek(1)">NEXT ►</button>
+      </div>
+      <div id="status-dot"></div>
+      <div class="topbar-info" id="topbar-time">--:--:--</div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div class="sidebar-header" onclick="toggleSidebar()">// teacher registry</div>
+    <div id="search-wrap">
+      <input id="teacher-search" placeholder="search..." autocomplete="off" oninput="filterTeachers()" spellcheck="false"/>
+    </div>
+    <div id="teacher-count">loading...</div>
+    <div id="teacher-list"></div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main" style="position:relative">
+    <div id="empty-state">
+      <div class="empty-ascii">┌────────────────────┐
+│  SELECT A TARGET   │
+│  FROM THE REGISTRY │
+└────────────────────┘</div>
+      <div class="empty-hint">&gt; awaiting target selection_</div>
+    </div>
+    <div id="timetable-wrap">
+      <div id="time-bar"></div>
+      <div class="tt-teacher-header">
+        <div class="tt-teacher-name glitch" id="tt-name" data-text=""></div>
+        <div class="tt-teacher-full" id="tt-full"></div>
+      </div>
+      <div id="tt-grid" class="tt-grid"></div>
+    </div>
+    <div id="loading-overlay">
+      <div class="spinner">SCANNING</div>
+      <div id="loading-text">INTERCEPTING TIMETABLE DATA...</div>
+      <div id="loading-progress"></div>
+    </div>
+  </div>
+
+  <!-- MOBILE BOTTOM BAR -->
+  <div id="mobile-bar" style="display:none">
+    <div class="tt-teacher-chip" id="mobile-teacher-chip">—</div>
+    <div class="week-nav">
+      <button onclick="changeWeek(-1)">◄</button>
+      <span id="week-label-m">—</span>
+      <button onclick="changeWeek(1)">►</button>
+    </div>
+    <div class="m-status"><div id="status-dot-m"></div><span id="mobile-time">--:--:--</span></div>
+  </div>
+</div>
+
+<script>
+const SCHOOL  = 'paulinum';
+const BASEURL = 'https://paulinum.webuntis.com';
+
+function proxied(path, params = {}) {
+  const url = new URL(BASEURL + path);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  return 'https://corsproxy.io/?' + encodeURIComponent(url.toString());
+}
+
+function getMonday(dateStr) {
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(new Date(d).setDate(diff));
+}
+
+function formatDate(d) { return d.toISOString().slice(0, 10); }
+function untisToDate(n) {
+  const s = String(n);
+  return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+}
+function formatTime(t) {
+  const s = String(t).padStart(4, '0');
+  return `${s.slice(0,2)}:${s.slice(2)}`;
+}
+function isoToUntisInt(iso) { return parseInt(iso.replace(/-/g, '')); }
+
+const DAY_NAMES = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+const DAY_FULL  = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
+
+let masterData = null;
+let teacherPeriods = {};   // teacherId → [{...period, subjectName, classNames, roomName}]
+let activeTeacher = null;
+let currentWeekMonday = getMonday(new Date().toISOString().slice(0,10));
+let allTeachers = [];
+
+function bootLog(msg) {
+  const el = document.getElementById('boot-log');
+  const line = document.createElement('div');
+  line.className = 'line';
+  line.textContent = '> ' + msg;
+  el.appendChild(line);
+  if (el.children.length > 8) el.firstChild.remove();
+}
+function setProgress(p) {
+  document.getElementById('progress-fill').style.width = p + '%';
+}
+
+setInterval(() => {
+  const n = new Date();
+  const t = [n.getHours(), n.getMinutes(), n.getSeconds()].map(x => String(x).padStart(2,'0')).join(':');
+  document.getElementById('topbar-time').textContent = t;
+  const mt = document.getElementById('mobile-time');
+  if (mt) mt.textContent = t;
+}, 1000);
+
+const isMobile = () => window.innerWidth <= 768;
+
+function toggleSidebar() {
+  if (!isMobile()) return;
+  document.getElementById('sidebar').classList.toggle('collapsed');
+}
+
+function setupMobileBar() {
+  const bar = document.getElementById('mobile-bar');
+  bar.style.display = isMobile() ? 'flex' : 'none';
+}
+
+function syncMobileWeekLabel() {
+  const friday = new Date(currentWeekMonday);
+  friday.setDate(friday.getDate() + 4);
+  const fmt = d => d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+  const label = `${fmt(currentWeekMonday)} – ${fmt(friday)}`;
+  const el = document.getElementById('week-label-m');
+  if (el) el.textContent = label;
+}
+
+window.addEventListener('resize', setupMobileBar);
+
+async function fetchJSON(url, opts = {}, retries = 2) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const r = await fetch(url, { credentials: 'omit', ...opts });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } catch(e) {
+      if (i === retries) throw e;
+      await new Promise(r => setTimeout(r, 500 * (i+1)));
+    }
+  }
+}
+
+async function pLimit(tasks, concurrency) {
+  const results = [];
+  let idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      const i = idx++;
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return results;
+}
+
+async function loadMasterData() {
+  const data = await fetchJSON(
+    proxied('/WebUntis/jsonrpc_intern.do', { m: 'getUserData2017', school: SCHOOL, v: 'i2.2' }),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: 'Awesome', method: 'getUserData2017', jsonrpc: '2.0',
+        params: [{ auth: { clientTime: Date.now(), user: '#anonymous#', otp: 100170 } }]
+      })
+    }
+  );
+  if (data.error) throw new Error(data.error.message);
+  return data.result.masterData;
+}
+
+async function fetchClassTimetable(klassId, dateStr) {
+  const data = await fetchJSON(
+    proxied('/WebUntis/api/public/timetable/weekly/data', {
+      elementType: 1, elementId: klassId, date: dateStr, formatId: 1
+    })
+  );
+  return data?.data?.result?.data || null;
+}
+
+function buildTeacherTimetables(allClassData, md) {
+  const map = {};
+  const subjectIdx = {};  md.subjects.forEach(s => subjectIdx[s.id] = s);
+  const roomIdx    = {};  md.rooms.forEach(r => roomIdx[r.id] = r);
+  const klassIdx   = {};  md.klassen.forEach(k => klassIdx[k.id] = k);
+  const teacherIdx = {};  md.teachers.forEach(t => teacherIdx[t.id] = t);
+
+  for (const { klassId, ttData } of allClassData) {
+    if (!ttData) continue;
+    const { elementPeriods, elements } = ttData;
+    if (!elementPeriods || !elementPeriods[klassId]) continue;
+
+    const elIdx = {};
+    (elements || []).forEach(e => { elIdx[`${e.type}_${e.id}`] = e; });
+
+    for (const period of elementPeriods[klassId]) {
+      if (period.cellState !== 'STANDARD' || period.code !== 0) {
+        console.log('NON-STANDARD PERIOD:', JSON.stringify(period, null, 2));
+      }
+      const teacherEls = period.elements.filter(e => e.type === 2);
+      if (!teacherEls.length) continue;
+
+      const subjectEl  = period.elements.find(e => e.type === 3);
+      const roomEl     = period.elements.find(e => e.type === 4);
+      const classEls   = period.elements.filter(e => e.type === 1);
+
+      const subjectName = subjectEl
+        ? (elIdx[`3_${subjectEl.id}`]?.name || subjectIdx[subjectEl.id]?.name || '?')
+        : '—';
+      const roomName = roomEl
+        ? (elIdx[`4_${roomEl.id}`]?.name || roomIdx[roomEl.id]?.name || '?')
+        : '—';
+      const classNames = classEls.map(c =>
+        elIdx[`1_${c.id}`]?.name || klassIdx[c.id]?.name || '?'
+      );
+
+      for (const te of teacherEls) {
+        const tid = te.id;
+        if (!map[tid]) map[tid] = [];
+        const key = `${period.lessonId}_${period.date}`;
+        const existing = map[tid].find(p => `${p.lessonId}_${p.date}` === key);
+        if (existing) {
+          existing.startTime = Math.min(existing.startTime, period.startTime);
+          existing.endTime   = Math.max(existing.endTime,   period.endTime);
+        } else {
+          map[tid].push({ ...period, subjectName, roomName, classNames });
+        }
+      }
+    }
+  }
+  return map;
+}
+
+async function boot() {
+  bootLog('INITIALIZING SYSTEM...');
+  setProgress(5);
+  await new Promise(r => setTimeout(r, 300));
+
+  try {
+    bootLog('AUTHENTICATING AS #anonymous#...');
+    masterData = await loadMasterData();
+    setProgress(15);
+    bootLog(`DATA ACQUIRED: ${masterData.klassen.length} CLASSES / ${masterData.teachers.length} TEACHERS`);
+
+    const activeKlassen = masterData.klassen.filter(k => k.active && k.displayable);
+    bootLog(`SCANNING ${activeKlassen.length} CLASS TIMETABLES...`);
+
+    const weekStr = formatDate(currentWeekMonday);
+    let done = 0;
+
+    const tasks = activeKlassen.map(k => async () => {
+      const ttData = await fetchClassTimetable(k.id, weekStr);
+      done++;
+      setProgress(30 + Math.round((done / activeKlassen.length) * 55));
+      bootLog(`INTERCEPTED: ${k.name.padEnd(8)} [${done}/${activeKlassen.length}]`);
+      return { klassId: k.id, ttData };
+    });
+
+    const allClassData = await pLimit(tasks, 4);
+    setProgress(88);
+
+    bootLog('RECONSTRUCTING TEACHER TIMETABLES...');
+    teacherPeriods = buildTeacherTimetables(allClassData, masterData);
+
+    const coveredTeacherIds = new Set(Object.keys(teacherPeriods).map(Number));
+    bootLog(`INDEXED ${coveredTeacherIds.size} ACTIVE TEACHERS`);
+    setProgress(96);
+
+    allTeachers = masterData.teachers
+      .filter(t => t.active && coveredTeacherIds.has(t.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    bootLog(`ACCESS GRANTED. ${allTeachers.length} TARGETS AVAILABLE.`);
+    setProgress(100);
+
+    await new Promise(r => setTimeout(r, 600));
+    document.getElementById('boot').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+    setupMobileBar();
+
+    renderTeacherList(allTeachers);
+    updateWeekLabel();
+
+  } catch(e) {
+    bootLog('ERROR: ' + e.message);
+    setProgress(0);
+  }
+}
+
+function renderTeacherList(teachers) {
+  const list = document.getElementById('teacher-list');
+  list.innerHTML = '';
+  teachers.forEach(t => {
+    const periods = (teacherPeriods[t.id] || []).length;
+    const div = document.createElement('div');
+    div.className = 'teacher-item' + (activeTeacher?.id === t.id ? ' active' : '');
+    div.dataset.id = t.id;
+    div.innerHTML = `
+      <div>
+        <div class="t-abbr">${t.name}</div>
+        <div class="t-name">${t.firstName} ${t.lastName}</div>
+      </div>
+      <div class="t-badge">${periods}</div>
+    `;
+    div.onclick = () => selectTeacher(t);
+    list.appendChild(div);
+  });
+  document.getElementById('teacher-count').textContent =
+    `// ${teachers.length} targets found`;
+}
+
+function filterTeachers() {
+  const q = document.getElementById('teacher-search').value.toLowerCase();
+  const filtered = allTeachers.filter(t =>
+    t.name.toLowerCase().includes(q) ||
+    t.firstName.toLowerCase().includes(q) ||
+    t.lastName.toLowerCase().includes(q)
+  );
+  renderTeacherList(filtered);
+}
+
+function selectTeacher(teacher) {
+  activeTeacher = teacher;
+  document.querySelectorAll('.teacher-item').forEach(el => {
+    el.classList.toggle('active', Number(el.dataset.id) === teacher.id);
+  });
+  const chip = document.getElementById('mobile-teacher-chip');
+  if (chip) chip.textContent = teacher.name;
+  if (isMobile()) {
+    document.getElementById('sidebar').classList.add('collapsed');
+  }
+  renderTimetable();
+  setTimeout(updateTimeBar, 50);
+  if (timeBarInterval) clearInterval(timeBarInterval);
+  timeBarInterval = setInterval(updateTimeBar, 30000);
+}
+
+function updateWeekLabel() {
+  const friday = new Date(currentWeekMonday);
+  friday.setDate(friday.getDate() + 4);
+  const fmt = d => d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+  const label = `${fmt(currentWeekMonday)} – ${fmt(friday)} ${currentWeekMonday.getFullYear()}`;
+  document.getElementById('week-label').textContent = label;
+  syncMobileWeekLabel();
+}
+
+async function changeWeek(dir) {
+  currentWeekMonday = new Date(currentWeekMonday);
+  currentWeekMonday.setDate(currentWeekMonday.getDate() + dir * 7);
+  updateWeekLabel();
+
+  const overlay = document.getElementById('loading-overlay');
+  overlay.classList.add('visible');
+  document.getElementById('loading-text').textContent = 'INTERCEPTING NEW WEEK DATA...';
+
+  try {
+    const activeKlassen = masterData.klassen.filter(k => k.active && k.displayable);
+    const weekStr = formatDate(currentWeekMonday);
+    let done = 0;
+
+    const tasks = activeKlassen.map(k => async () => {
+      const ttData = await fetchClassTimetable(k.id, weekStr);
+      done++;
+      document.getElementById('loading-progress').textContent =
+        `[${done}/${activeKlassen.length}] ${k.name}`;
+      return { klassId: k.id, ttData };
+    });
+
+    const allClassData = await pLimit(tasks, 4);
+    teacherPeriods = buildTeacherTimetables(allClassData, masterData);
+
+    if (activeTeacher) { renderTimetable(); setTimeout(updateTimeBar, 50); }
+    renderTeacherList(
+      allTeachers.filter(t => {
+        const q = document.getElementById('teacher-search').value.toLowerCase();
+        return !q || t.name.toLowerCase().includes(q) ||
+          t.firstName.toLowerCase().includes(q) || t.lastName.toLowerCase().includes(q);
+      })
+    );
+  } catch(e) {
+    console.error(e);
+  } finally {
+    overlay.classList.remove('visible');
+  }
+}
+
+function renderTimetable() {
+  document.getElementById('empty-state').style.display = 'none';
+  const wrap = document.getElementById('timetable-wrap');
+  wrap.classList.add('visible');
+
+  const t = activeTeacher;
+  const nameEl = document.getElementById('tt-name');
+  nameEl.textContent = t.name;
+  nameEl.setAttribute('data-text', t.name);
+  document.getElementById('tt-full').textContent =
+    `// ${t.firstName} ${t.lastName}`.toUpperCase();
+
+  const periods = (teacherPeriods[t.id] || []);
+
+  const days = Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(currentWeekMonday);
+    d.setDate(d.getDate() + i);
+    return { iso: formatDate(d), untisInt: isoToUntisInt(formatDate(d)) };
+  });
+
+  const rawSlots = masterData.timeGrid.days[0].units;
+  const slots = rawSlots.map(u => ({
+    start: u.startTime.replace('T',''),
+    end:   u.endTime.replace('T',''),
+    startInt: parseInt(u.startTime.replace('T','').replace(':','')),
+    endInt:   parseInt(u.endTime.replace('T','').replace(':',''))
+  }));
+
+  const todayInt = isoToUntisInt(new Date().toISOString().slice(0,10));
+
+  // grid[dayIdx][slotIdx] = { period, rowspan } | { continuation: true } | null
+  const grid = {};
+  for (let d = 0; d < 5; d++) grid[d] = {};
+
+  for (const p of periods) {
+    const dayIdx = days.findIndex(d => d.untisInt === p.date);
+    if (dayIdx === -1) continue;
+
+    const covered = slots.reduce((acc, s, i) => {
+      if (p.startTime < s.endInt && p.endTime > s.startInt) acc.push(i);
+      return acc;
+    }, []);
+    if (!covered.length) continue;
+
+    const startSlot = covered[0];
+    const rowspan   = covered.length;
+
+    if (!grid[dayIdx][startSlot]) {
+      grid[dayIdx][startSlot] = { periods: [], rowspan };
+    }
+    grid[dayIdx][startSlot].periods.push(p);
+
+    for (let r = 1; r < rowspan; r++) {
+      grid[dayIdx][startSlot + r] = { continuation: true };
+    }
+  }
+
+  // CSS grid rows: 1 = header, 2…N+1 = slots
+  // CSS grid cols: 1 = time,   2…6   = days Mon–Fri
+  const container = document.getElementById('tt-grid');
+  container.style.gridTemplateColumns = `70px repeat(5, 1fr)`;
+  container.style.gridTemplateRows    = `auto repeat(${slots.length}, minmax(52px, auto))`;
+  container.innerHTML = '';
+
+  function makeCell(cssRow, cssCol, rowspan = 1) {
+    const el = document.createElement('div');
+    el.style.gridRow    = rowspan > 1 ? `${cssRow} / span ${rowspan}` : `${cssRow}`;
+    el.style.gridColumn = `${cssCol}`;
+    return el;
+  }
+
+  const corner = makeCell(1, 1);
+  corner.className = 'tt-cell header';
+  corner.innerHTML = `<span style="font-size:0.55rem;color:var(--green-dark)">TIME</span>`;
+  container.appendChild(corner);
+
+  days.forEach((d, i) => {
+    const cell = makeCell(1, i + 2);
+    cell.className = 'tt-cell header' + (d.untisInt === todayInt ? ' today-col' : '');
+    const jsDate = new Date(d.iso);
+    const dayNum = jsDate.getDate().toString().padStart(2,'0') + '.' + (jsDate.getMonth()+1).toString().padStart(2,'0');
+    cell.innerHTML = `${DAY_NAMES[i]}<br><span style="font-size:0.55rem;color:var(--green-dark)">${dayNum}</span>`;
+    if (d.untisInt === todayInt) cell.style.borderBottom = '2px solid var(--green)';
+    container.appendChild(cell);
+  });
+
+  // Data rows (grid rows 2…N+1)
+  slots.forEach((slot, slotIdx) => {
+    const cssRow = slotIdx + 2;
+
+    // Time column
+    const timeCell = makeCell(cssRow, 1);
+    timeCell.className = 'tt-cell time-col';
+    timeCell.innerHTML = `<span class="period-num">${slotIdx + 1}</span><span>${slot.start}</span><span style="color:var(--green-dark)">↕</span><span>${slot.end}</span>`;
+    container.appendChild(timeCell);
+
+    // Day columns
+    days.forEach((d, dayIdx) => {
+      const entry = grid[dayIdx][slotIdx];
+
+      if (entry?.continuation) return;
+
+      const rowspan = entry?.rowspan || 1;
+      const cell = makeCell(cssRow, dayIdx + 2, rowspan);
+      cell.className = 'tt-cell' + (d.untisInt === todayInt ? ' today-col' : '');
+      cell.style.padding = '2px';
+
+      const cellPeriods = entry?.periods || [];
+      if (!cellPeriods.length) {
+        cell.classList.add('no-lessons');
+      } else {
+        cellPeriods.forEach(p => {
+          const block = document.createElement('div');
+          const cancelled     = p.cellState === 'CANCEL';
+          const substitution  = p.cellState === 'SUBSTITUTION';
+          const irregular     = p.cellState === 'IRREGULAR';
+          let cls = 'period-block';
+          if (cancelled)    cls += ' cancelled';
+          if (substitution) cls += ' substitution';
+          if (irregular)    cls += ' irregular';
+          block.className = cls;
+
+          const classes = p.classNames.join(', ');
+          const stateLabel = cancelled ? '\n⚠ CANCELLED' : substitution ? '\n↔ SUBSTITUTION' : irregular ? '\n~ IRREGULAR' : '';
+          const tooltip = `${p.subjectName}\n${t.firstName} ${t.lastName}\n${classes}\n${p.roomName}\n${formatTime(p.startTime)}-${formatTime(p.endTime)}${stateLabel}`;
+          block.setAttribute('data-tooltip', tooltip);
+
+          block.innerHTML = `
+            <div class="pb-subject">${p.subjectName}</div>
+            <div class="pb-classes">${classes}</div>
+            <div class="pb-room">${p.roomName}</div>
+          `;
+          cell.appendChild(block);
+        });
+      }
+      container.appendChild(cell);
+    });
+  });
+}
+
+let timeBarInterval = null;
+
+function updateTimeBar() {
+  const bar = document.getElementById('time-bar');
+  if (!bar) return;
+
+  const grid = document.getElementById('tt-grid');
+  if (!grid || !activeTeacher) { bar.style.display = 'none'; return; }
+
+  // Only show on current week
+  const now = new Date();
+  const todayInt = isoToUntisInt(now.toISOString().slice(0,10));
+  const days = Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(currentWeekMonday);
+    d.setDate(d.getDate() + i);
+    return isoToUntisInt(formatDate(d));
+  });
+  const dayCol = days.indexOf(todayInt); // 0-4, -1 if not this week
+  if (dayCol === -1) { bar.style.display = 'none'; return; }
+
+  const slots = masterData.timeGrid.days[0].units.map(u => ({
+    startInt: parseInt(u.startTime.replace('T','').replace(':','')),
+    endInt:   parseInt(u.endTime.replace('T','').replace(':',''))
+  }));
+
+  const nowInt = now.getHours() * 100 + now.getMinutes();
+  const firstSlot = slots[0].startInt;
+  const lastSlot  = slots[slots.length - 1].endInt;
+
+  if (nowInt < firstSlot || nowInt > lastSlot) { bar.style.display = 'none'; return; }
+
+  const gridRect = grid.getBoundingClientRect();
+  const wrapRect = document.getElementById('timetable-wrap').getBoundingClientRect();
+
+  const todayCssCol = dayCol + 2;
+
+  const allCells = Array.from(grid.children);
+  const todayCells = allCells.filter(c => {
+    const col = c.style.gridColumn;
+    const row = c.style.gridRow;
+    return col == todayCssCol && row != '1';
+  });
+  if (!todayCells.length) { bar.style.display = 'none'; return; }
+
+  const firstCell = todayCells[0].getBoundingClientRect();
+  const lastCell  = todayCells[todayCells.length - 1].getBoundingClientRect();
+
+  const gridTop    = firstCell.top  - wrapRect.top + document.getElementById('timetable-wrap').scrollTop;
+  const gridBottom = lastCell.bottom - wrapRect.top + document.getElementById('timetable-wrap').scrollTop;
+  const totalPx    = gridBottom - gridTop;
+  const totalTime  = lastSlot - firstSlot;
+
+  const fraction = (nowInt - firstSlot) / totalTime;
+  const yPx = gridTop + fraction * totalPx;
+
+  bar.style.display = 'block';
+  bar.style.top = yPx + 'px';
+  bar.style.left = (firstCell.left - wrapRect.left) + 'px';
+  bar.style.right = (wrapRect.right - lastCell.right) + 'px';
+  bar.style.width = 'auto';
+}
+
+
+boot();
+</script>
+</body>
+</html>
