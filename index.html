@@ -710,6 +710,8 @@ const BASEURL = 'https://paulinum.webuntis.com';
 const DEFAULT_PROXY = 'https://untis-proxy.cziepp.workers.dev/?url=';
 const CUSTOM_PROXY = new URLSearchParams(location.search).get('proxy') ||
   localStorage.getItem('untis_proxy') || DEFAULT_PROXY;
+const CUSTOM_AGG = new URLSearchParams(location.search).get('agg') ||
+  localStorage.getItem('untis_agg') || '';
 const CORS_SH_KEY = localStorage.getItem('cors_sh_key') || '';
 
 const PROXIES = [];
@@ -738,6 +740,18 @@ if (CORS_SH_KEY) {
 
 addProxy('CORSPROXY.IO', ['GET', 'POST'], url => 'https://corsproxy.io/?' + encodeURIComponent(url));
 addProxy('ALLORIGINS', ['GET'], url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url));
+
+function inferWorkerOrigin(maybeUrl) {
+  if (!maybeUrl) return '';
+  try {
+    return new URL(maybeUrl).origin;
+  } catch {
+    return '';
+  }
+}
+
+const AGGREGATE_ENDPOINT = CUSTOM_AGG ||
+  (inferWorkerOrigin(CUSTOM_PROXY) || inferWorkerOrigin(DEFAULT_PROXY)) + '/aggregate';
 
 function buildBaseUrl(path, params = {}) {
   const url = new URL(BASEURL + path);
@@ -864,6 +878,14 @@ async function fetchJSONWithFallback(path, params = {}, opts = {}, {
   throw lastErr || new Error('All proxy attempts failed');
 }
 
+async function fetchAggregateWeek(dateStr) {
+  if (!AGGREGATE_ENDPOINT) throw new Error('No aggregate endpoint configured');
+  const url = new URL(AGGREGATE_ENDPOINT);
+  url.searchParams.set('school', SCHOOL);
+  url.searchParams.set('date', dateStr);
+  return await fetchJSON(url.toString(), { method: 'GET' });
+}
+
 async function pLimit(tasks, concurrency) {
   const results = [];
   let idx = 0;
@@ -965,26 +987,11 @@ async function boot() {
 
   try {
     bootLog('AUTHENTICATING AS #anonymous#...');
-    masterData = await loadMasterData();
-    setProgress(15);
-    bootLog(`DATA ACQUIRED: ${masterData.klassen.length} CLASSES / ${masterData.teachers.length} TEACHERS`);
-
-    const activeKlassen = masterData.klassen.filter(k => k.active && k.displayable);
-    bootLog(`SCANNING ${activeKlassen.length} CLASS TIMETABLES...`);
-
     const weekStr = formatDate(currentWeekMonday);
-    let done = 0;
-
-    const tasks = activeKlassen.map(k => async () => {
-      const ttData = await fetchClassTimetable(k.id, weekStr);
-      done++;
-      setProgress(30 + Math.round((done / activeKlassen.length) * 55));
-      bootLog(`FETCHED: ${k.name.padEnd(8)} [${done}/${activeKlassen.length}]`);
-      return { klassId: k.id, ttData };
-    });
-
-    const allClassData = await pLimit(tasks, 4);
-    setProgress(88);
+    const agg = await fetchAggregateWeek(weekStr);
+    masterData = agg.masterData;
+    const allClassData = agg.classData || [];
+    setProgress(70);
 
     bootLog('RECONSTRUCTING TEACHER TIMETABLES...');
     teacherPeriods = buildTeacherTimetables(allClassData, masterData);
@@ -1010,8 +1017,8 @@ async function boot() {
 
   } catch(e) {
     bootLog('ERROR: ' + e.message);
-    if (!CUSTOM_PROXY && !CORS_SH_KEY) {
-      bootLog('HINT: set ?proxy=YOUR_PROXY_PREFIX (or localStorage.untis_proxy) for a private CORS proxy.');
+    if (!CUSTOM_AGG) {
+      bootLog('HINT: set ?agg=YOUR_WORKER_AGG (or localStorage.untis_agg) for aggregate endpoint.');
     }
     setProgress(0);
   }
@@ -1084,19 +1091,10 @@ async function changeWeek(dir) {
   document.getElementById('loading-text').textContent = 'FETCHING NEW WEEK DATA...';
 
   try {
-    const activeKlassen = masterData.klassen.filter(k => k.active && k.displayable);
     const weekStr = formatDate(currentWeekMonday);
-    let done = 0;
-
-    const tasks = activeKlassen.map(k => async () => {
-      const ttData = await fetchClassTimetable(k.id, weekStr);
-      done++;
-      document.getElementById('loading-progress').textContent =
-        `[${done}/${activeKlassen.length}] ${k.name}`;
-      return { klassId: k.id, ttData };
-    });
-
-    const allClassData = await pLimit(tasks, 4);
+    const agg = await fetchAggregateWeek(weekStr);
+    masterData = agg.masterData;
+    const allClassData = agg.classData || [];
     teacherPeriods = buildTeacherTimetables(allClassData, masterData);
 
     if (activeTeacher) { renderTimetable(); setTimeout(updateTimeBar, 50); }
@@ -1158,16 +1156,24 @@ function renderTimetable() {
     }, []);
     if (!covered.length) continue;
 
-    const startSlot = covered[0];
-    const rowspan   = covered.length;
+    const startSlot = covered.find(i => !grid[dayIdx][i]?.continuation);
+    if (startSlot === undefined) continue;
+    const endSlot = covered[covered.length - 1];
+    const rowspan = endSlot - startSlot + 1;
 
-    if (!grid[dayIdx][startSlot]) {
+    if (!grid[dayIdx][startSlot] || grid[dayIdx][startSlot].continuation) {
       grid[dayIdx][startSlot] = { periods: [], rowspan };
+    } else if (!grid[dayIdx][startSlot].periods) {
+      grid[dayIdx][startSlot].periods = [];
     }
+    grid[dayIdx][startSlot].rowspan = Math.max(grid[dayIdx][startSlot].rowspan || 1, rowspan);
     grid[dayIdx][startSlot].periods.push(p);
 
     for (let r = 1; r < rowspan; r++) {
-      grid[dayIdx][startSlot + r] = { continuation: true };
+      const idx = startSlot + r;
+      if (!grid[dayIdx][idx]) {
+        grid[dayIdx][idx] = { continuation: true };
+      }
     }
   }
 
