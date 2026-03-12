@@ -707,17 +707,46 @@ body::after { display: none; }
 const SCHOOL  = 'paulinum';
 const BASEURL = 'https://paulinum.webuntis.com';
 
-const CORS_PROXIES = [
-  raw => 'https://proxy.cors.sh/' + raw,
-  raw => 'https://corsproxy.io/?' + encodeURIComponent(raw),
-  raw => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(raw),
-];
-let activeProxyIdx = 0;
+const DEFAULT_PROXY = 'https://untis-proxy.cziepp.workers.dev/?url=';
+const CUSTOM_PROXY = new URLSearchParams(location.search).get('proxy') ||
+  localStorage.getItem('untis_proxy') || DEFAULT_PROXY;
+const CORS_SH_KEY = localStorage.getItem('cors_sh_key') || '';
 
-function proxied(path, params = {}) {
+const PROXIES = [];
+function addProxy(name, methods, wrap, headers = null) {
+  PROXIES.push({ name, methods, wrap, headers });
+}
+
+function wrapCustomProxy(base, url) {
+  if (!base) return url;
+  if (base.includes('{url}')) return base.replace('{url}', url);
+  if (base.endsWith('url=')) return base + encodeURIComponent(url);
+  if (base.includes('?')) return base + (base.endsWith('?') || base.endsWith('&') ? '' : '&') + 'url=' + encodeURIComponent(url);
+  if (base.endsWith('/')) return base + '?url=' + encodeURIComponent(url);
+  return base + '?url=' + encodeURIComponent(url);
+}
+
+if (CUSTOM_PROXY) {
+  addProxy('CUSTOM PROXY', ['GET', 'POST'], url => wrapCustomProxy(CUSTOM_PROXY, url));
+}
+
+if (CORS_SH_KEY) {
+  addProxy('CORS.SH', ['GET', 'POST'], url => 'https://proxy.cors.sh/' + url, {
+    'x-cors-api-key': CORS_SH_KEY
+  });
+}
+
+addProxy('CORSPROXY.IO', ['GET', 'POST'], url => 'https://corsproxy.io/?' + encodeURIComponent(url));
+addProxy('ALLORIGINS', ['GET'], url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url));
+
+function buildBaseUrl(path, params = {}) {
   const url = new URL(BASEURL + path);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  return CORS_PROXIES[activeProxyIdx](url.toString());
+  return url.toString();
+}
+
+function getProxiesForMethod(method) {
+  return PROXIES.filter(p => p.methods.includes(method));
 }
 
 function getMonday(dateStr) {
@@ -803,6 +832,38 @@ async function fetchJSON(url, opts = {}, retries = 2) {
   }
 }
 
+async function fetchJSONWithFallback(path, params = {}, opts = {}, {
+  method = 'GET',
+  allowDirect = true,
+  logFailures = false
+} = {}) {
+  const baseUrl = buildBaseUrl(path, params);
+  const candidates = [];
+  if (allowDirect) candidates.push({ name: 'DIRECT', url: baseUrl, headers: null });
+  getProxiesForMethod(method).forEach(p => {
+    candidates.push({ name: p.name, url: p.wrap(baseUrl), headers: p.headers });
+  });
+
+  let lastErr = null;
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    try {
+      const mergedHeaders = c.headers
+        ? { ...(opts.headers || {}), ...c.headers }
+        : (opts.headers || undefined);
+      const finalOpts = mergedHeaders ? { ...opts, headers: mergedHeaders } : { ...opts };
+      return await fetchJSON(c.url, finalOpts);
+    } catch(e) {
+      lastErr = e;
+      if (logFailures && i < candidates.length - 1) {
+        bootLog(`${c.name} FAILED — TRYING FALLBACK...`);
+        await new Promise(r => setTimeout(r, 250));
+      }
+    }
+  }
+  throw lastErr || new Error('All proxy attempts failed');
+}
+
 async function pLimit(tasks, concurrency) {
   const results = [];
   let idx = 0;
@@ -817,26 +878,29 @@ async function pLimit(tasks, concurrency) {
 }
 
 async function loadMasterData() {
-  const data = await fetchJSON(
-    proxied('/WebUntis/jsonrpc_intern.do', { m: 'getUserData2017', school: SCHOOL, v: 'i2.2' }),
+  const data = await fetchJSONWithFallback(
+    '/WebUntis/jsonrpc_intern.do',
+    { m: 'getUserData2017', school: SCHOOL, v: 'i2.2' },
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // Intentionally omit Content-Type to avoid CORS preflight on some proxies.
       body: JSON.stringify({
         id: 'Awesome', method: 'getUserData2017', jsonrpc: '2.0',
         params: [{ auth: { clientTime: Date.now(), user: '#anonymous#', otp: 100170 } }]
       })
-    }
+    },
+    { method: 'POST', allowDirect: false, logFailures: true }
   );
   if (data.error) throw new Error(data.error.message);
   return data.result.masterData;
 }
 
 async function fetchClassTimetable(klassId, dateStr) {
-  const data = await fetchJSON(
-    proxied('/WebUntis/api/public/timetable/weekly/data', {
-      elementType: 1, elementId: klassId, date: dateStr, formatId: 1
-    })
+  const data = await fetchJSONWithFallback(
+    '/WebUntis/api/public/timetable/weekly/data',
+    { elementType: 1, elementId: klassId, date: dateStr, formatId: 1 },
+    {},
+    { method: 'GET', allowDirect: false, logFailures: false }
   );
   return data?.data?.result?.data || null;
 }
@@ -894,22 +958,6 @@ function buildTeacherTimetables(allClassData, md) {
   return map;
 }
 
-async function loadMasterDataWithProxyFallback() {
-  for (let pi = 0; pi < CORS_PROXIES.length; pi++) {
-    activeProxyIdx = pi;
-    try {
-      return await loadMasterData();
-    } catch(e) {
-      if (pi < CORS_PROXIES.length - 1) {
-        bootLog(`PROXY ${pi + 1} FAILED — TRYING FALLBACK...`);
-        await new Promise(r => setTimeout(r, 400));
-      } else {
-        throw e;
-      }
-    }
-  }
-}
-
 async function boot() {
   bootLog('INITIALIZING SYSTEM...');
   setProgress(5);
@@ -917,7 +965,7 @@ async function boot() {
 
   try {
     bootLog('AUTHENTICATING AS #anonymous#...');
-    masterData = await loadMasterDataWithProxyFallback();
+    masterData = await loadMasterData();
     setProgress(15);
     bootLog(`DATA ACQUIRED: ${masterData.klassen.length} CLASSES / ${masterData.teachers.length} TEACHERS`);
 
@@ -962,6 +1010,9 @@ async function boot() {
 
   } catch(e) {
     bootLog('ERROR: ' + e.message);
+    if (!CUSTOM_PROXY && !CORS_SH_KEY) {
+      bootLog('HINT: set ?proxy=YOUR_PROXY_PREFIX (or localStorage.untis_proxy) for a private CORS proxy.');
+    }
     setProgress(0);
   }
 }
