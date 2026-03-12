@@ -707,10 +707,17 @@ body::after { display: none; }
 const SCHOOL  = 'paulinum';
 const BASEURL = 'https://paulinum.webuntis.com';
 
+const CORS_PROXIES = [
+  raw => 'https://proxy.cors.sh/' + raw,
+  raw => 'https://corsproxy.io/?' + encodeURIComponent(raw),
+  raw => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(raw),
+];
+let activeProxyIdx = 0;
+
 function proxied(path, params = {}) {
   const url = new URL(BASEURL + path);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  return 'https://corsproxy.io/?' + encodeURIComponent(url.toString());
+  return CORS_PROXIES[activeProxyIdx](url.toString());
 }
 
 function getMonday(dateStr) {
@@ -887,6 +894,22 @@ function buildTeacherTimetables(allClassData, md) {
   return map;
 }
 
+async function loadMasterDataWithProxyFallback() {
+  for (let pi = 0; pi < CORS_PROXIES.length; pi++) {
+    activeProxyIdx = pi;
+    try {
+      return await loadMasterData();
+    } catch(e) {
+      if (pi < CORS_PROXIES.length - 1) {
+        bootLog(`PROXY ${pi + 1} FAILED — TRYING FALLBACK...`);
+        await new Promise(r => setTimeout(r, 400));
+      } else {
+        throw e;
+      }
+    }
+  }
+}
+
 async function boot() {
   bootLog('INITIALIZING SYSTEM...');
   setProgress(5);
@@ -894,7 +917,7 @@ async function boot() {
 
   try {
     bootLog('AUTHENTICATING AS #anonymous#...');
-    masterData = await loadMasterData();
+    masterData = await loadMasterDataWithProxyFallback();
     setProgress(15);
     bootLog(`DATA ACQUIRED: ${masterData.klassen.length} CLASSES / ${masterData.teachers.length} TEACHERS`);
 
